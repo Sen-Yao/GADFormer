@@ -1,17 +1,16 @@
-from __future__ import division
-from __future__ import print_function
-
-import time
 import argparse
-import numpy as np
-
 import torch
-import torch.nn.functional as F
+import numpy as np
 import torch.optim as optim
+import time
+from tqdm import tqdm
+
 from utils import load_data
 from models import GCN
-from sklearn.metrics import roc_curve, auc
-from tqdm import tqdm
+
+from train.train import train
+from train.test import test
+
 
 # Training settings
 parser = argparse.ArgumentParser()
@@ -68,51 +67,14 @@ if args.cuda:
 weights=[args.alpha, 1]
 class_weights = torch.FloatTensor(weights)
 
-def train(epoch):
-    t = time.time()
-    model.train()
-    optimizer.zero_grad()
-    output, w1, w2, w3, w4 = model(features, adj)
-    
-    w1 = torch.pow(torch.norm(w1), 2)
-    w2 = torch.pow(torch.norm(w2), 2)
-    w3 = torch.pow(torch.norm(w3), 2)
-    w4 = torch.pow(torch.norm(w4), 2)
-    l2_reg = w1 + w2 + w3 + w4 
-
-    loss = torch.nn.CrossEntropyLoss(weight=class_weights).to(output.device)
-    loss_train = loss(output[idx_train], labels[idx_train]) + args.beta*l2_reg
-    loss_train.backward()
-    optimizer.step()
-    
-    if not args.fastmode:
-        # Evaluate validation set performance separately,
-        # deactivates dropout during validation run.
-        model.eval()
-        output, w1, w2, w3, w4 = model(features, adj) 
-        
-    loss_val = loss(output[idx_val], labels[idx_val]) + args.beta*l2_reg
-    return loss_train.item(), loss_val.item(), time.time() - t
-
-def test():
-    model.eval()
-    output, _, _, _, _ = model(features, adj)
-
-    loss = torch.nn.CrossEntropyLoss(weight = class_weights).to(output.device)
-    loss_test = loss(output[idx_test], labels[idx_test])
-
-    scores = F.softmax(output, dim=1)
-    fpr, tpr, t = roc_curve(labels[idx_test].detach().cpu().numpy(), scores[idx_test,0].detach().cpu().numpy(), pos_label = 0)
-    roc_auc= auc(fpr, tpr)    
-    return roc_auc
 
 # Train model
 t_total = time.time()
 max_auc = 0
 with tqdm(range(args.epochs), desc="Training") as pbar:
     for epoch in pbar:
-        loss_train, loss_val, epoch_time = train(epoch)
-        roc_auc = test()
+        loss_train, loss_val, epoch_time = train(args, model, optimizer, features, adj, labels, idx_train, idx_val, class_weights)
+        roc_auc = test(args, model, features, adj, labels, idx_test, class_weights)
         if roc_auc > max_auc:
             max_auc = roc_auc
         pbar.set_postfix({
