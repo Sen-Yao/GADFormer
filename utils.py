@@ -5,6 +5,8 @@ import scipy.sparse as sp
 import sys
 import torch
 import sklearn
+from sklearn.preprocessing import StandardScaler
+
 
 def parse_index_file(filename):
     """Parse index file."""
@@ -77,7 +79,9 @@ def load_data(dataset_str):
 
     features = sp.vstack((allx, tx)).tolil()
     features[test_idx_reorder, :] = features[test_idx_range, :]
-    features = sklearn.preprocessing.scale(np.array(features.todense()))
+    features_dense = np.array(features.todense(), dtype=float)
+    scaler = StandardScaler()
+    features = scaler.fit_transform(features_dense)
 
     adj = nx.adjacency_matrix(nx.from_dict_of_lists(graph))
     adj =normalize(adj)
@@ -90,7 +94,7 @@ def load_data(dataset_str):
     
     labels = np.argmax(labels, axis=1)    
     labels = np.where(labels == abnormal_class,0,1)
-    
+
     idx = np.array(range(len(labels)))
     np.random.shuffle(idx)
     idx_normal = idx[idx != 0]  # Normal classes index
@@ -103,7 +107,7 @@ def load_data(dataset_str):
     idx_val = all_idx[num_train : num_train + num_val]
     idx_test = all_idx[num_train + num_val : ]  
 
-    
+
     features = torch.FloatTensor(features)
     labels = torch.LongTensor(labels)
     adj = sparse_mx_to_torch_sparse_tensor(adj)
