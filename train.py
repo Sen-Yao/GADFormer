@@ -11,6 +11,7 @@ import torch.optim as optim
 from utils import load_data
 from models import GCN
 from sklearn.metrics import roc_curve, auc
+from tqdm import tqdm
 
 # Training settings
 parser = argparse.ArgumentParser()
@@ -90,11 +91,8 @@ def train(epoch):
         model.eval()
         output, w1, w2, w3, w4 = model(features, adj) 
         
-    loss_val = loss(output[idx_val], labels[idx_val]) + args.beta*l2_reg    
-    print('Epoch: {:04d}'.format(epoch+1),
-          'loss_train: {:.4f}'.format(loss_train.item()),
-          'loss_val: {:.4f}'.format(loss_val.item()),
-          'time: {:.4f}s'.format(time.time() - t))
+    loss_val = loss(output[idx_val], labels[idx_val]) + args.beta*l2_reg
+    return loss_train.item(), loss_val.item(), time.time() - t
 
 def test():
     model.eval()
@@ -111,10 +109,16 @@ def test():
 # Train model
 t_total = time.time()
 max_auc = 0
-for epoch in range(args.epochs):
-    train(epoch)
-    roc_auc = test()
-    if roc_auc>max_auc:
-        max_auc = roc_auc
+with tqdm(range(args.epochs), desc="Training") as pbar:
+    for epoch in pbar:
+        loss_train, loss_val, epoch_time = train(epoch)
+        roc_auc = test()
+        if roc_auc > max_auc:
+            max_auc = roc_auc
+        pbar.set_postfix({
+            "loss_train": f"{loss_train:.4f}",
+            "loss_val": f"{loss_val:.4f}",
+            "time": f"{epoch_time:.4f}s"
+        })
 AUC = max_auc
 print('AUC: {:04f}'.format(AUC))
